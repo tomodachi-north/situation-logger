@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Community Situation Logger</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --bg: #f4f1ea;
+    --card: #fffdf8;
+    --ink: #2b2a28;
+    --accent: #7a5c3e;
+    --line: #ddd6c9;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg);
+    color: var(--ink);
+    padding: 24px 16px 60px;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  .sub { color: #7c766c; font-size: 0.9rem; margin: 0 0 24px; }
+  .section-title {
+    font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em;
+    color: #9a9384; margin: 24px 0 10px;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    gap: 10px;
+  }
+  .btn {
+    border: 1px solid var(--line);
+    background: var(--card);
+    color: var(--ink);
+    padding: 16px 12px;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    cursor: pointer;
+    transition: transform 0.08s ease, box-shadow 0.15s ease;
+    text-align: left;
+    line-height: 1.3;
+  }
+  .btn:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.07); }
+  .btn:active { transform: scale(0.97); }
+  .btn .emoji { font-size: 1.3rem; display: block; margin-bottom: 4px; }
+  .toolbar {
+    display: flex; gap: 10px; flex-wrap: wrap;
+    margin: 28px 0 16px; align-items: center;
+  }
+  .toolbar input {
+    flex: 1; min-width: 140px;
+    padding: 10px 12px; border: 1px solid var(--line);
+    border-radius: 10px; font-size: 0.9rem; background: var(--card);
+  }
+  .action {
+    padding: 10px 18px; border: none; border-radius: 10px;
+    font-size: 0.9rem; cursor: pointer; font-weight: 600;
+  }
+  .export { background: var(--accent); color: #fff; }
+  .clear { background: #e9e3d6; color: var(--ink); }
+  .count { font-size: 0.85rem; color: #7c766c; margin-left: auto; }
+  table { width: 100%; border-collapse: collapse; margin-top: 8px; font-size: 0.85rem; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  th { color: #9a9384; font-weight: 600; font-size: 0.75rem; text-transform: uppercase; }
+  .empty { color: #b3ab9c; padding: 20px 0; text-align: center; }
+  .del { color: #b5473f; cursor: pointer; border: none; background: none; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Community Situation Logger</h1>
+  <p class="sub">Tap a button to log a situation. Add an optional note, then export to Excel.</p>
+
+  <div class="section-title">Log a situation</div>
+  <div class="grid" id="buttons"></div>
+
+  <div class="toolbar">
+    <input id="note" type="text" placeholder="Optional note for the next entry (location, detail…)">
+  </div>
+  <div class="toolbar">
+    <button class="action export" onclick="exportExcel()">Export to Excel</button>
+    <button class="action clear" onclick="clearLog()">Clear log</button>
+    <span class="count" id="count">0 entries</span>
+  </div>
+
+  <div class="section-title">Logged entries</div>
+  <table>
+    <thead><tr><th>Time</th><th>Situation</th><th>Note</th><th></th></tr></thead>
+    <tbody id="log"></tbody>
+  </table>
+</div>
+
+<script>
+  // Edit this list to match your community space's situations
+  const SITUATIONS = [
+    { label: "Noise complaint", emoji: "🔊" },
+    { label: "Maintenance issue", emoji: "🔧" },
+    { label: "Safety concern", emoji: "⚠️" },
+    { label: "Conflict / dispute", emoji: "💬" },
+    { label: "Visitor / guest", emoji: "🚪" },
+    { label: "Cleaning needed", emoji: "🧹" },
+    { label: "Lost & found", emoji: "🔑" },
+    { label: "Medical / first aid", emoji: "➕" },
+    { label: "Equipment issue", emoji: "🖥️" },
+    { label: "Other", emoji: "📝" },
+  ];
+
+  let entries = [];
+
+  const btnWrap = document.getElementById('buttons');
+  SITUATIONS.forEach(s => {
+    const b = document.createElement('button');
+    b.className = 'btn';
+    b.innerHTML = `<span class="emoji">${s.emoji}</span>${s.label}`;
+    b.onclick = () => log(s.label);
+    btnWrap.appendChild(b);
+  });
+
+  function log(label) {
+    const noteEl = document.getElementById('note');
+    const now = new Date();
+    entries.push({
+      date: now.toLocaleDateString(),
+      time: now.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit', second:'2-digit'}),
+      iso: now.toISOString(),
+      situation: label,
+      note: noteEl.value.trim()
+    });
+    noteEl.value = '';
+    render();
+  }
+
+  function render() {
+    const log = document.getElementById('log');
+    document.getElementById('count').textContent = entries.length + (entries.length === 1 ? ' entry' : ' entries');
+    if (!entries.length) {
+      log.innerHTML = '<tr><td colspan="4" class="empty">No entries yet.</td></tr>';
+      return;
+    }
+    log.innerHTML = entries.map((e, i) =>
+      `<tr>
+        <td>${e.date} ${e.time}</td>
+        <td>${e.situation}</td>
+        <td>${e.note || '—'}</td>
+        <td><button class="del" onclick="removeEntry(${i})">delete</button></td>
+      </tr>`
+    ).reverse().join('');
+  }
+
+  function removeEntry(i) { entries.splice(i, 1); render(); }
+
+  function clearLog() {
+    if (entries.length && confirm('Clear all logged entries?')) { entries = []; render(); }
+  }
+
+  function exportExcel() {
+    if (!entries.length) { alert('No entries to export yet.'); return; }
+    const rows = entries.map(e => ({
+      Date: e.date,
+      Time: e.time,
+      Situation: e.situation,
+      Note: e.note
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [{wch:14},{wch:12},{wch:22},{wch:40}];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Situations');
+    const stamp = new Date().toISOString().slice(0,10);
+    XLSX.writeFile(wb, `situation-log-${stamp}.xlsx`);
+  }
+
+  render();
+</script>
+</body>
+</html>
